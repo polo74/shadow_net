@@ -38,8 +38,10 @@ void sub_matrix(data_t*** matrix, data_t*** sub, int x, int y, int z);
 void rand_matrix(data_t*** rand, int x, int y, int z);
 void relu_matrix(data_t*** matrix, int x, int y, int z);
 void flatten_matrix(data_t*** matrix, data_t* array, int x, int y, int z, bool forward);
+void lineartransformation(data_t*** matrix, int x, int y, int z, data_t coef);
 void average_pool(data_t*** matrix, data_t*** average, int table_x, int table_y, int table_z, int average_x, int average_y, int average_z, int win_x, int win_y);
 void softmax(data_t* array, int x);
+void batchnorm(data_t*** matrix, int x, int y, int z);
 
 int main(void){
 
@@ -122,9 +124,9 @@ int main(void){
 
     */
 
-    int x = 512;
-    int y = 256;
-    int z = 16;
+    int x = 2;
+    int y = 2;
+    int z = 2;
 
     int win_x = 1;
     int win_y = 1;
@@ -139,6 +141,14 @@ int main(void){
     data_t*** average = init_matrix(average_x, average_y, average_z);
     data_t* flat = init_array(flat_x);
 
+    for (int k = 0; k < z; k++){
+        for (int j = 0; j < y; j++){
+            for (int i = 0; i < x; i++){
+                data[k][j][i] = z * k * j;
+            }
+        }
+    }
+
     //conv'
     //GO TEE
     //linear transformation = anti conv'
@@ -148,10 +158,11 @@ int main(void){
         data_t ***mask = add_mask(data, x, y, z);
         //OUT TEE --> conv'
         //GO TEE
-        //Linear transformation = anti conv'
+        lineartransformation(data, x, y, z, 1); //Linear transformation = anti conv'
         sub_mask(data, mask, x, y, z);
         relu_matrix(data, x, y, z);
-        // BatchNorm
+        batchnorm(data, x, y, z);
+        print_matrix(data, x, y, z);
     }
 
     average_pool(data, average, x, y, z, average_x, average_y, average_z, win_x, win_y);
@@ -160,8 +171,8 @@ int main(void){
     softmax(flat, flat_x);
 
     free_array(flat);
-    free_matrix(average, average_x, average_y);
-    free_matrix(data, x, y);
+    free_matrix(data, y, z);
+    free_matrix(average, average_y, average_z);
 
     return 0;
 }
@@ -203,7 +214,7 @@ data_t* init_array(int x){
 
 void free_matrix(data_t*** matrix, int y, int z){
     for (int k = 0; k < z; k++) {
-        for (int j = 0; j <y; j++) {
+        for (int j = 0; j < y; j++) {
             free(matrix[k][j]);
         }
         free(matrix[k]);
@@ -237,7 +248,7 @@ void print_table(data_t** table, int x, int y){
     printf("\n");
     for (int j = 0; j < y; j++) {
         for (int i = 0; i < x; i++) {
-            printf("%d %d\t %f\n", i, j, table[i][j]);
+            printf("%d %d\t %f\n", i, j, table[j][i]);
         }
     }
 }
@@ -252,7 +263,7 @@ void rand_matrix(data_t*** random, int x, int y, int z){
     for (int k = 0; k < z; k++){
         for (int j = 0; j < y; j++){
             for (int i = 0; i < x; i++){
-                random[k][j][i] = rand() % 10;
+                random[k][j][i] = rand() % 1000;
             }
         }
     }
@@ -307,6 +318,16 @@ void flatten_matrix(data_t*** matrix, data_t* array, int x, int y, int z, bool f
     }
 }
 
+void lineartransformation(data_t*** matrix, int x, int y, int z, data_t coef){
+    for (int k = 0; k < z; ++k) {
+        for (int j = 0; j < y; ++j) {
+            for (int i = 0; i < x; ++i) {
+                matrix[k][j][i] = matrix[k][j][i] * coef;
+            }
+        }
+    }
+}
+
 void average_pool(data_t*** matrix, data_t*** average, int table_x, int table_y, int table_z, int average_x, int average_y, int average_z, int win_x, int win_y) {
     //Width must be divisible by X
 
@@ -317,7 +338,7 @@ void average_pool(data_t*** matrix, data_t*** average, int table_x, int table_y,
             }
         }
     }
-// Todo
+
     for (int k = 0; k < table_z; k++) {
         for (int j = 0; j < table_y; j += win_y) {
             for (int i = 0; i < table_x; i += win_x) {
@@ -353,17 +374,52 @@ void softmax(data_t* array, int x){
 
 data_t mean(data_t** table, int x, int y) {
     int n = x * y;
-    int sum = 0;
+    data_t sum = 0;
     for (int j = 0; j < y; j++) {
         for (int i = 0; i < x; i++) {
-            sum += table[i][j];
+            sum += table[j][i];
         }
     }
-    return (1 / n) * sum;
+    return (1.0 / (data_t)n) * sum;
+}
+
+data_t deviation(data_t** table, int x, int y, data_t mean){
+    int n = x * y;
+    data_t sum = 0;
+    for (int j = 0; j < y; j++) {
+        for (int i = 0; i < x; i++) {
+            sum += (table[j][i] - mean) * (table[j][i] - mean);
+        }
+    }
+    return (1.0 / (data_t)n) * sum;
+}
+
+void norm(data_t** table, int x, int y, data_t mean, data_t deviation, data_t epsilon){
+    for (int j = 0; j < y; j++) {
+        for (int i = 0; i < x; i++) {
+            table[j][i] = (table[j][i] - mean) / sqrt(fabs(deviation - epsilon));
+        }
+    }
+}
+
+void layerout(data_t** table, int x, int y, data_t gamma, data_t beta){
+    for (int j = 0; j < y; j++) {
+        for (int i = 0; i < x; i++) {
+            table[j][i] = gamma * table[j][i] + beta;
+        }
+    }
 }
 
 void batchnorm(data_t*** matrix, int x, int y, int z) {
+    data_t epsilon = -0.00001;
+    data_t gamma = 1;
+    data_t beta = 0;
+
     for (int k = 0; k < z; k++) {
-        data_t** table = matrix[z];
+        data_t **table = matrix[k];
+        data_t m_mean = mean(table, x, y);
+        data_t m_deviation = deviation(table, x, y, m_mean);
+        norm(table, x, y, m_mean, m_deviation, epsilon);
+        layerout(table, x, y, gamma, beta);
     }
 }
