@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <time.h>
+#include <err.h>
 
 /*
  * array: 1 dim
@@ -43,8 +44,7 @@ void average_pool(data_t*** matrix, data_t*** average, int table_x, int table_y,
 void softmax(data_t* array, int x);
 void batchnorm(data_t*** matrix, int x, int y, int z);
 
-int main(void){
-
+int main(int argc, char** argv){
 
     srand(time(NULL));
 
@@ -124,9 +124,13 @@ int main(void){
 
     */
 
-    int x = 2;
-    int y = 2;
-    int z = 2;
+    if (argc != 4){
+        errx(EXIT_FAILURE, "Argument number is incorrect: it is x, y, z");
+    }
+
+    int x = atoi(argv[1]);
+    int y = atoi(argv[2]);
+    int z = atoi(argv[3]);
 
     int win_x = 1;
     int win_y = 1;
@@ -162,7 +166,6 @@ int main(void){
         sub_mask(data, mask, x, y, z);
         relu_matrix(data, x, y, z);
         batchnorm(data, x, y, z);
-        print_matrix(data, x, y, z);
     }
 
     average_pool(data, average, x, y, z, average_x, average_y, average_z, win_x, win_y);
@@ -364,7 +367,7 @@ void softmax(data_t* array, int x){
     data_t sum = 0;
     for (int i = 0; i < x; i++){
         sum += (data_t) exp(array[i]);
-        array[i] = (data_t) exp(array[i]); // Todo: put it on the below 'for' loop
+        array[i] = (data_t) exp(array[i]);
     }
 
     for (int i = 0; i < x; i++) {
